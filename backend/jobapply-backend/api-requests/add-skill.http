@@ -1,0 +1,8 @@
+
+POST http://localhost:8080/api/profiles/1/skills
+Content-Type: application/json
+
+{
+  "skillName": "Spring Boot",
+  "proficiency": "INTERMEDIATE"
+}

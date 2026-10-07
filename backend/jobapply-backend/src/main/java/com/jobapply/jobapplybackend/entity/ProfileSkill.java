@@ -1,10 +1,7 @@
 package com.jobapply.jobapplybackend.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 @Entity
 @Table(name = "profile_skills")
@@ -12,19 +9,22 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class ProfileSkill {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "profile_id", nullable = false)
     private Profile profile;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "skill_id", nullable = false)
     private Skill skill;
 
-    private String proficiency;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Proficiency proficiency;
 }
