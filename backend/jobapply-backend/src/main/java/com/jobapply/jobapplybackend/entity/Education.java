@@ -1,10 +1,7 @@
 package com.jobapply.jobapplybackend.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 @Entity
 @Table(name = "education")
@@ -12,14 +9,21 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class Education {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private EducationLevel educationLevel;
+
+    @Column(nullable = false)
     private String degree;
 
+    @Column(nullable = false)
     private String institution;
 
     private String fieldOfStudy;
@@ -28,7 +32,9 @@ public class Education {
 
     private Integer endYear;
 
-    @ManyToOne
+    private Boolean isCurrentlyStudying;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "profile_id", nullable = false)
     private Profile profile;
 }
