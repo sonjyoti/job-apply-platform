@@ -1,0 +1,15 @@
+### GET request to example server
+POST http://localhost:8080/api/profiles/1/experiences
+Content-Type: application/json
+
+{
+    "company": "NIELIT Kokrajhar",
+    "jobTitle": "Web Developer Intern",
+    "employmentType": "INTERNSHIP",
+    "startDate": "2026-02-16",
+    "endDate": "2026-08-20",
+    "currentlyWorking": false,
+    "description": "Developed a public healthcare kiosk system using Spring Boot, PostgreSQL and microservices."
+}
+
+###
