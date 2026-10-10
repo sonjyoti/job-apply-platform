@@ -1,0 +1,21 @@
+PUT http://localhost:8080/api/profiles/1/preferences
+Content-Type: application/json
+
+{
+  "minExperience": 0,
+  "maxExperience": 2,
+  "minimumSalary": 0,
+  "salaryCurrency": "INR",
+  "workModes": ["REMOTE", "HYBRID"],
+  "experienceLevels": ["ENTRY_LEVEL", "JUNIOR"],
+  "preferredRoles": [
+    "Java Developer",
+    "Backend Developer",
+    "Spring Boot Developer"
+  ],
+  "preferredLocations": [
+    "Guwahati",
+    "Bengaluru",
+    "Remote"
+  ]
+}
