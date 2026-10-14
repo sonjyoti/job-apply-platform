@@ -152,7 +152,7 @@ def map_job(raw_job):
 
     return {
         "externalJobId": str(raw_job["id"]),
-        "source": "JOB_API",
+        "source": "REMOTIVE",
         "title": raw_job.get("title") or "Untitled job",
         "company": raw_job.get("company_name") or "Unknown company",
         "location": candidate_location or "Not specified",
