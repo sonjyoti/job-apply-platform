@@ -31,4 +31,14 @@ public class ProfileController {
 
         return ResponseEntity.ok(profileService.getProfile(id));
     }
+
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ProfileResponse> updateProfile(
+            @PathVariable Long id,
+            @Valid @RequestBody ProfileRequest request) {
+
+        return ResponseEntity.ok(profileService.updateProfile(id, request));
+    }
+
 }
