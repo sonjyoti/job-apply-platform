@@ -24,6 +24,9 @@ public class JobMatchResponse {
     private Double locationScore;
     private Double salaryScore;
 
+    private Boolean fresherFriendly;
+    private String experienceFit;
+
     // Explain why a job received its score.
     private List<String> matchedSkills = new ArrayList<>();
     private List<String> reasons = new ArrayList<>();

@@ -74,9 +74,27 @@ public class JobMatchingService {
                 .map(job -> calculateMatch(
                         job, skillNames, prefs, roles, locations
                 ))
-                .sorted(Comparator.comparingDouble(
-                        JobMatchResponse::getMatchScore
-                ).reversed())
+                .sorted(
+                        Comparator
+                                .comparingInt(
+                                        (JobMatchResponse match) -> {
+                                            if (Boolean.TRUE.equals(
+                                                    match.getFresherFriendly())) {
+                                                return 0;
+                                            }
+
+                                            if (match.getFresherFriendly() == null) {
+                                                return 1;
+                                            }
+
+                                            return 2;
+                                        }
+                                )
+                                .thenComparing(
+                                        JobMatchResponse::getMatchScore,
+                                        Comparator.reverseOrder()
+                                )
+                )
                 .toList();
     }
 
@@ -125,6 +143,15 @@ public class JobMatchingService {
                 job, preferences
         );
         response.setExperienceScore(experienceScore);
+        response.setExperienceFit(
+                getExperienceFit(experienceScore)
+        );
+
+        response.setFresherFriendly(
+                experienceScore == null
+                        ? null
+                        : experienceScore == 100.0
+        );
 
         // 4. Location and work mode: 10%
         Double locationScore = calculateLocationScore(
@@ -534,5 +561,21 @@ public class JobMatchingService {
         }
 
         return false;
+    }
+
+    private String getExperienceFit(Double experienceScore) {
+        if (experienceScore == null) {
+            return "UNKNOWN";
+        }
+
+        if (experienceScore == 100.0) {
+            return "SUITABLE";
+        }
+
+        if (experienceScore == 0.0) {
+            return "NOT_SUITABLE";
+        }
+
+        return "PARTIAL_MATCH";
     }
 }
