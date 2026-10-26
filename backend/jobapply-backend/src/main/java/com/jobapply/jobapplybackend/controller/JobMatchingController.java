@@ -1,3 +1,4 @@
+
 package com.jobapply.jobapplybackend.controller;
 
 import com.jobapply.jobapplybackend.dto.JobMatchResponse;
@@ -20,7 +21,11 @@ public class JobMatchingController {
     @GetMapping
     public ResponseEntity<List<JobMatchResponse>> getJobMatches(
             @PathVariable Long profileId,
-            @RequestParam(defaultValue = "0") double minScore) {
+            @RequestParam(defaultValue = "0") double minScore,
+            @RequestParam(required = false)
+            Integer maxMissingRequiredSkills,
+            @RequestParam(defaultValue = "false")
+            boolean fresherFriendlyOnly) {
 
         if (minScore < 0 || minScore > 100) {
             throw new IllegalArgumentException(
@@ -28,12 +33,20 @@ public class JobMatchingController {
             );
         }
 
+        if (maxMissingRequiredSkills != null
+                && maxMissingRequiredSkills < 0) {
+            throw new IllegalArgumentException(
+                    "maxMissingRequiredSkills cannot be negative"
+            );
+        }
+
         List<JobMatchResponse> matches =
-                jobMatchingService.findMatches(profileId)
-                        .stream()
-                        .filter(match ->
-                                match.getMatchScore() >= minScore)
-                        .toList();
+                jobMatchingService.findMatches(
+                        profileId,
+                        minScore,
+                        maxMissingRequiredSkills,
+                        fresherFriendlyOnly
+                );
 
         return ResponseEntity.ok(matches);
     }

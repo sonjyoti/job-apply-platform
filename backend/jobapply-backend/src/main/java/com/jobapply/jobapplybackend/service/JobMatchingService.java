@@ -26,13 +26,32 @@ public class JobMatchingService {
     private final PreferredRoleRepository preferredRoleRepository;
     private final PreferredLocationRepository preferredLocationRepository;
 
-    public List<JobMatchResponse> findMatches(Long profileId) {
+
+    public List<JobMatchResponse> findMatches(
+            Long profileId,
+            Double minScore,
+            Integer maxMissingRequiredSkills,
+            Boolean fresherFriendlyOnly) {
 
         // Ensure the profile exists.
         profileRepository.findById(profileId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Profile not found"
+                        HttpStatus.NOT_FOUND,
+                        "Profile not found"
                 ));
+
+        if (minScore != null && (minScore < 0 || minScore > 100)) {
+            throw new IllegalArgumentException(
+                    "minScore must be between 0 and 100"
+            );
+        }
+
+        if (maxMissingRequiredSkills != null
+                && maxMissingRequiredSkills < 0) {
+            throw new IllegalArgumentException(
+                    "maxMissingRequiredSkills cannot be negative"
+            );
+        }
 
         List<ProfileSkill> profileSkills =
                 profileSkillRepository.findByProfileId(profileId);
@@ -40,7 +59,7 @@ public class JobMatchingService {
         Set<String> skillNames = profileSkills.stream()
                 .map(ps -> ps.getSkill().getName())
                 .filter(Objects::nonNull)
-                .map(String::toLowerCase)
+                .map(skill -> skill.toLowerCase(Locale.ROOT))
                 .collect(Collectors.toSet());
 
         JobPreference preferences =
@@ -74,6 +93,22 @@ public class JobMatchingService {
                 .map(job -> calculateMatch(
                         job, skillNames, prefs, roles, locations
                 ))
+                .filter(match ->
+                        minScore == null
+                                || match.getMatchScore() >= minScore
+                )
+                .filter(match ->
+                        maxMissingRequiredSkills == null
+                                || (match.getMissingRequiredSkillsCount() != null
+                                && match.getMissingRequiredSkillsCount()
+                                <= maxMissingRequiredSkills)
+                )
+                .filter(match ->
+                        !Boolean.TRUE.equals(fresherFriendlyOnly)
+                                || Boolean.TRUE.equals(
+                                match.getFresherFriendly()
+                        )
+                )
                 .sorted(
                         Comparator
                                 .comparingInt(
@@ -125,6 +160,20 @@ public class JobMatchingService {
         );
 
         Double skillScore = analysis.score();
+
+        Double requiredCoverage = analysis.required().isEmpty()
+                ? null
+                : Math.round(
+                (analysis.required().size()
+                 - analysis.missingRequired().size())
+                * 10000.0
+                / analysis.required().size()
+        ) / 100.0;
+
+        response.setRequiredSkillsCoverage(requiredCoverage);
+        response.setMissingRequiredSkillsCount(
+                analysis.missingRequired().size()
+        );
 
         response.setSkillScore(skillScore);
         response.setMatchedSkills(analysis.matched());
@@ -193,6 +242,13 @@ public class JobMatchingService {
         );
 
         // Explain the result.
+        if (requiredCoverage != null) {
+            response.getReasons().add(
+                    "Required skills coverage: "
+                            + requiredCoverage + "%"
+            );
+        }
+
         if (!analysis.matched().isEmpty()) {
             response.getReasons().add(
                     "Matching skills: " +
@@ -399,39 +455,59 @@ public class JobMatchingService {
             List<String> missingRequired
     ) {}
 
+
     private SkillAnalysis analyzeSkills(
             String jobText,
             Set<String> profileSkills) {
 
-        // Initial technology vocabulary. Expand this as we add sources.
         Set<String> knownSkills = new TreeSet<>(
-                Set.of(
-                        "Java",
-                        "Spring Boot",
-                        "Spring",
-                        "SQL",
-                        "PostgreSQL",
-                        "MySQL",
-                        "REST API",
-                        "Microservices",
-                        "Docker",
-                        "Kubernetes",
-                        "Redis",
-                        "Kafka",
-                        "React",
-                        "JavaScript",
-                        "TypeScript",
-                        "Node.js",
-                        "Python",
-                        "AWS",
-                        "Git",
-                        "Linux",
-                        "MongoDB"
-                )
+                String.CASE_INSENSITIVE_ORDER
         );
 
-        // Include additional skills entered in the user's profile.
-        knownSkills.addAll(profileSkills);
+        knownSkills.addAll(Set.of(
+                "Java",
+                "Spring Boot",
+                "Spring",
+                "SQL",
+                "PostgreSQL",
+                "MySQL",
+                "REST API",
+                "Microservices",
+                "Docker",
+                "Kubernetes",
+                "Redis",
+                "Kafka",
+                "React",
+                "JavaScript",
+                "TypeScript",
+                "Node.js",
+                "Python",
+                "AWS",
+                "Git",
+                "Linux",
+                "MongoDB"
+        ));
+
+        // Include skills entered in the user's profile.
+        if (profileSkills != null) {
+            knownSkills.addAll(profileSkills);
+        }
+
+        String normalizedJobText = nullToEmpty(jobText)
+                .toLowerCase(Locale.ROOT);
+
+        // Normalize profile skill names for reliable comparisons.
+        Set<String> normalizedProfileSkills = new HashSet<>();
+
+        if (profileSkills != null) {
+            for (String profileSkill : profileSkills) {
+                if (profileSkill != null && !profileSkill.isBlank()) {
+                    normalizedProfileSkills.add(
+                            profileSkill.trim().toLowerCase(Locale.ROOT)
+                    );
+                }
+            }
+        }
 
         List<String> required = new ArrayList<>();
         List<String> preferred = new ArrayList<>();
@@ -443,32 +519,70 @@ public class JobMatchingService {
         double earnedWeight = 0.0;
 
         for (String skill : knownSkills) {
-            String normalizedSkill = skill.toLowerCase(Locale.ROOT);
-
-            if (!containsSkill(jobText, normalizedSkill)) {
+            if (skill == null || skill.isBlank()) {
                 continue;
             }
 
-            String context = getSkillContext(jobText, normalizedSkill);
+            String normalizedSkill = skill.trim()
+                    .toLowerCase(Locale.ROOT);
+
+            if (!containsSkill(normalizedJobText, normalizedSkill)) {
+                continue;
+            }
+
+            String context = getSkillContext(
+                    normalizedJobText,
+                    normalizedSkill
+            );
 
             boolean isPreferred = containsAny(
                     context,
                     "nice to have",
+                    "nice-to-have",
                     "preferred",
                     "bonus",
                     "desirable",
                     "a plus",
+                    "good to have",
                     "optional"
             );
 
-            boolean isRequired = !isPreferred && containsAny(
+            boolean explicitlyNotRequired = containsAny(
+                    context,
+                    "not required",
+                    "not mandatory",
+                    "not essential",
+                    "not necessary",
+                    "no experience required",
+                    "no prior experience",
+                    "not a requirement"
+            );
+
+            boolean isRequired = !isPreferred
+                    && !explicitlyNotRequired
+                    && containsAny(
                     context,
                     "required",
                     "must have",
+                    "must-have",
                     "essential",
                     "requirements",
-                    "minimum qualifications"
+                    "minimum qualifications",
+                    "mandatory"
             );
+
+            // Skills explicitly marked as not required should not
+            // count as missing required skills. Still record a match
+            // when the candidate has the skill.
+            if (explicitlyNotRequired && !isPreferred) {
+                mentioned.add(skill);
+
+                if (normalizedProfileSkills.contains(normalizedSkill)) {
+                    matched.add(skill);
+                }
+
+                continue;
+            }
 
             double weight;
 
@@ -476,7 +590,7 @@ public class JobMatchingService {
                 required.add(skill);
                 weight = 1.0;
 
-                if (!profileSkills.contains(normalizedSkill)) {
+                if (!normalizedProfileSkills.contains(normalizedSkill)) {
                     missingRequired.add(skill);
                 }
             } else if (isPreferred) {
@@ -489,13 +603,13 @@ public class JobMatchingService {
 
             totalWeight += weight;
 
-            if (profileSkills.contains(normalizedSkill)) {
+            if (normalizedProfileSkills.contains(normalizedSkill)) {
                 matched.add(skill);
                 earnedWeight += weight;
             }
         }
 
-        Double score = totalWeight == 0
+        Double score = totalWeight == 0.0
                 ? null
                 : Math.round(
                 earnedWeight / totalWeight * 10000.0
@@ -537,20 +651,45 @@ public class JobMatchingService {
     }
 
     private String getSkillContext(String text, String skill) {
-        String normalizedText = text.toLowerCase(Locale.ROOT);
-        int index = normalizedText.indexOf(skill);
+        String normalizedText = nullToEmpty(text)
+                .toLowerCase(Locale.ROOT);
 
-        if (index < 0) {
+        String normalizedSkill = skill.toLowerCase(Locale.ROOT);
+
+        java.util.regex.Matcher matcher =
+                java.util.regex.Pattern.compile(
+                        "(?<![a-z0-9+#.])"
+                                + java.util.regex.Pattern.quote(normalizedSkill)
+                                + "(?![a-z0-9+#.])"
+                ).matcher(normalizedText);
+
+        if (!matcher.find()) {
             return "";
         }
 
-        int start = Math.max(0, index - 120);
-        int end = Math.min(
-                normalizedText.length(),
-                index + skill.length() + 120
-        );
+        int start = matcher.start();
+        int end = matcher.end();
 
-        return normalizedText.substring(start, end);
+        int sentenceStart = Math.max(
+                normalizedText.lastIndexOf('.', start - 1),
+                Math.max(
+                        normalizedText.lastIndexOf('!', start - 1),
+                        normalizedText.lastIndexOf('?', start - 1)
+                )
+        ) + 1;
+
+        int sentenceEnd = normalizedText.length();
+
+        for (char punctuation : new char[]{'.', '!', '?'}) {
+            int index = normalizedText.indexOf(punctuation, end);
+            if (index >= 0) {
+                sentenceEnd = Math.min(sentenceEnd, index + 1);
+            }
+        }
+
+        return normalizedText
+                .substring(sentenceStart, sentenceEnd)
+                .trim();
     }
 
     private boolean containsAny(String text, String... phrases) {
